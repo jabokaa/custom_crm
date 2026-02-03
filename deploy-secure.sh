@@ -98,6 +98,9 @@ php artisan key:generate --force --no-interaction
 echo "🔍 Verificando configuração..."
 grep "APP_KEY=" .env
 
+echo "🗃️ Executando migrations..."
+php artisan migrate --force
+
 echo "📦 Copiando assets do build..."
 if [ -d "public/build" ]; then
     cp -r public/build public_html/build
@@ -126,9 +129,6 @@ echo "⚡ Otimizando para produção..."
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
-
-echo "🗃️ Executando migrations..."
-php artisan migrate --force
 
 echo "🌱 Executando seeders..."
 php artisan db:seed --force
