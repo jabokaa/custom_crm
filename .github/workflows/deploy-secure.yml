@@ -1,0 +1,90 @@
+name: Deploy to Production (Secure)
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: # Permite execução manual
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        extensions: mbstring, xml, ctype, iconv, intl, pdo_sqlite, pdo_mysql, zip
+        coverage: none
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y sshpass tar
+        
+    - name: Validate required files
+      run: |
+        if [ ! -f "deploy-secure.sh" ]; then
+          echo "❌ deploy-secure.sh not found!"
+          exit 1
+        fi
+        if [ ! -f "package.json" ]; then
+          echo "❌ package.json not found!"
+          exit 1
+        fi
+        if [ ! -f "composer.json" ]; then
+          echo "❌ composer.json not found!"
+          exit 1
+        fi
+        echo "✅ All required files found"
+        
+    - name: Cache Composer dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.composer/cache
+        key: composer-${{ hashFiles('**/composer.lock') }}
+        restore-keys: composer-
+        
+    - name: Update Composer dependencies
+      run: composer update --optimize-autoloader --no-dev --no-audit --no-interaction --prefer-dist
+      
+    - name: Make deploy script executable
+      run: chmod +x deploy-secure.sh
+      
+    - name: Run secure deploy script
+      run: |
+        set -e
+        echo "🚀 Starting secure deployment..."
+        if ./deploy-secure.sh; then
+          echo "✅ Deployment completed successfully!"
+        else
+          echo "❌ Deployment failed!"
+          exit 1
+        fi
+      env:
+        CI: true
+        SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+        SSH_USER: ${{ secrets.SSH_USER }}
+        SSH_HOST: ${{ secrets.SSH_HOST }}
+        SSH_PORT: ${{ secrets.SSH_PORT }}
+        DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        
+    - name: Notify deployment status
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "🎉 Deployment to production completed successfully!"
+        else
+          echo "💥 Deployment failed. Please check the logs above."
+        fi
